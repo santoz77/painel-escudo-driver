@@ -112,6 +112,7 @@ function LocationPicker({
 export default function App() {
   const CLOUD_NAME = "dzvtrzzxx";
   const UPLOAD_PRESET = "escudo-driver";
+  const GEOAPIFY_KEY = "53edc494ce1c466488a9a4c820be8116";
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -186,34 +187,39 @@ export default function App() {
     return data.secure_url;
   }
 
-  async function searchLocation() {
-    if (!searchText.trim()) {
-      alert("Digite um endereço para buscar.");
+async function searchLocation() {
+  if (!searchText.trim()) {
+    alert("Digite um endereço.");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
+        searchText
+      )}&limit=5&apiKey=${GEOAPIFY_KEY}`
+    );
+
+    const data = await response.json();
+
+    if (!data.features || data.features.length === 0) {
+      alert("Endereço não encontrado.");
       return;
     }
 
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          searchText
-        )}`
-      );
+    const place = data.features[0];
 
-      const data = await response.json();
+    const lat = place.geometry.coordinates[1];
+    const lon = place.geometry.coordinates[0];
 
-      if (data && data.length > 0) {
-        const lat = parseFloat(data[0].lat);
-        const lon = parseFloat(data[0].lon);
+    setLatitude(lat);
+    setLongitude(lon);
 
-        setLatitude(lat);
-        setLongitude(lon);
-      } else {
-        alert("Endereço não encontrado.");
-      }
-    } catch {
-      alert("Erro ao buscar endereço.");
-    }
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao buscar endereço.");
   }
+}
 
   async function loadCampaigns() {
     const q = query(collection(db, "campaigns"), orderBy("createdAt", "desc"));
