@@ -28,6 +28,7 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
+
 import L from "leaflet";
 
 type Campaign = {
@@ -40,6 +41,14 @@ type Campaign = {
   latitude?: number;
   longitude?: number;
   radiusMeters?: number;
+};
+
+type GeoapifySuggestion = {
+  properties: {
+    lat: number;
+    lon: number;
+    formatted?: string;
+  };
 };
 
 const markerIcon = new L.Icon({
@@ -101,13 +110,110 @@ function LocationPicker({
           },
         }}
       >
-        <Popup>Arraste para ajustar o ponto</Popup>
+        <Popup>Arraste para ajustar o ponto do anúncio</Popup>
       </Marker>
 
       <Circle center={[latitude, longitude]} radius={radiusMeters} />
     </>
   );
 }
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background:
+      "linear-gradient(180deg, #eef2ff 0%, #f8fafc 35%, #f8fafc 100%)",
+    fontFamily: "Arial, sans-serif",
+    padding: 24,
+  } as const,
+
+  container: {
+    maxWidth: 1320,
+    margin: "0 auto",
+  } as const,
+
+  card: {
+    background: "#ffffff",
+    borderRadius: 24,
+    padding: 24,
+    boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)",
+    border: "1px solid rgba(226,232,240,0.9)",
+  } as const,
+
+  title: {
+    margin: 0,
+    fontSize: 42,
+    fontWeight: 800,
+    color: "#0f172a",
+  } as const,
+
+  subtitle: {
+    margin: "8px 0 0",
+    color: "#475569",
+    fontSize: 16,
+  } as const,
+
+  sectionTitle: {
+    marginTop: 0,
+    marginBottom: 20,
+    fontSize: 30,
+    color: "#0f172a",
+  } as const,
+
+  input: {
+    width: "100%",
+    padding: 14,
+    marginBottom: 12,
+    borderRadius: 14,
+    border: "1px solid #cbd5e1",
+    boxSizing: "border-box" as const,
+    fontSize: 16,
+    outline: "none",
+    background: "#fff",
+  },
+
+  buttonPrimary: {
+    width: "100%",
+    padding: 14,
+    border: "none",
+    borderRadius: 14,
+    background: "#0f172a",
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: 700,
+    cursor: "pointer",
+  } as const,
+
+  buttonBlue: {
+    padding: "14px 18px",
+    border: "none",
+    borderRadius: 14,
+    background: "#2563eb",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+  } as const,
+
+  buttonDanger: {
+    padding: "12px 16px",
+    border: "none",
+    borderRadius: 12,
+    background: "#dc2626",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+  } as const,
+
+  infoBox: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 16,
+    color: "#334155",
+    lineHeight: 1.7,
+  } as const,
+};
 
 export default function App() {
   const CLOUD_NAME = "dzvtrzzxx";
@@ -130,6 +236,9 @@ export default function App() {
   const [longitude, setLongitude] = useState<number | null>(null);
 
   const [searchText, setSearchText] = useState("");
+  const [suggestions, setSuggestions] = useState<GeoapifySuggestion[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -183,43 +292,82 @@ export default function App() {
       }
     );
 
+    if (!res.ok) {
+      throw new Error("Erro ao enviar imagem");
+    }
+
     const data = await res.json();
-    return data.secure_url;
+    return data.secure_url as string;
   }
 
-async function searchLocation() {
-  if (!searchText.trim()) {
-    alert("Digite um endereço.");
-    return;
-  }
-
-  try {
-    const response = await fetch(
-      `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-        searchText
-      )}&limit=5&apiKey=${GEOAPIFY_KEY}`
-    );
-
-    const data = await response.json();
-
-    if (!data.features || data.features.length === 0) {
-      alert("Endereço não encontrado.");
+  async function fetchSuggestions(value: string) {
+    if (!value.trim()) {
+      setSuggestions([]);
       return;
     }
 
-    const place = data.features[0];
+    try {
+      setSearchLoading(true);
 
-    const lat = place.geometry.coordinates[1];
-    const lon = place.geometry.coordinates[0];
+      const response = await fetch(
+        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
+          value
+        )}&filter=rect:-42.95,-5.20,-42.70,-4.95&limit=5&apiKey=${GEOAPIFY_KEY}`
+      );
 
-    setLatitude(lat);
-    setLongitude(lon);
+      const data = await response.json();
 
-  } catch (err) {
-    console.error(err);
-    alert("Erro ao buscar endereço.");
+      if (data.features && data.features.length > 0) {
+        setSuggestions(data.features);
+      } else {
+        setSuggestions([]);
+      }
+    } catch (error) {
+      console.error("Erro ao buscar sugestões:", error);
+      setSuggestions([]);
+    } finally {
+      setSearchLoading(false);
+    }
   }
-}
+
+  async function searchLocation() {
+    if (!searchText.trim()) {
+      alert("Digite um endereço.");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
+          searchText
+        )}&filter=rect:-42.95,-5.20,-42.70,-4.95&limit=1&apiKey=${GEOAPIFY_KEY}`
+      );
+
+      const data = await response.json();
+
+      if (!data.features || data.features.length === 0) {
+        setLatitude(null);
+        setLongitude(null);
+        setSuggestions([]);
+        alert("Endereço não encontrado.");
+        return;
+      }
+
+      const place = data.features[0];
+      const lat = place.properties.lat;
+      const lon = place.properties.lon;
+
+      setLatitude(lat);
+      setLongitude(lon);
+      setSuggestions([]);
+    } catch (error) {
+      console.error("Erro ao buscar endereço:", error);
+      setLatitude(null);
+      setLongitude(null);
+      setSuggestions([]);
+      alert("Erro ao buscar endereço.");
+    }
+  }
 
   async function loadCampaigns() {
     const q = query(collection(db, "campaigns"), orderBy("createdAt", "desc"));
@@ -275,9 +423,11 @@ async function searchLocation() {
       setLatitude(null);
       setLongitude(null);
       setSearchText("");
+      setSuggestions([]);
 
       await loadCampaigns();
-    } catch {
+    } catch (error) {
+      console.error(error);
       alert("Erro ao criar campanha.");
     } finally {
       setLoading(false);
@@ -308,121 +458,83 @@ async function searchLocation() {
 
   if (authLoading) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Arial, sans-serif",
-          background: "#f4f6f8",
-        }}
-      >
-        Carregando...
+      <div style={styles.page}>
+        <div
+          style={{
+            minHeight: "80vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#334155",
+            fontSize: 22,
+            fontWeight: 700,
+          }}
+        >
+          Carregando painel...
+        </div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#f4f6f8",
-          fontFamily: "Arial, sans-serif",
-          padding: 20,
-        }}
-      >
+      <div style={styles.page}>
         <div
           style={{
-            width: 380,
-            background: "#fff",
-            padding: 32,
-            borderRadius: 16,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+            minHeight: "85vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          <h1 style={{ marginTop: 0, marginBottom: 10 }}>Painel Escudo Driver</h1>
-          <p style={{ color: "#666", marginBottom: 20 }}>
-            Faça login para acessar o painel administrativo.
-          </p>
-
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+          <div
             style={{
-              width: "100%",
-              padding: 12,
-              marginBottom: 12,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              boxSizing: "border-box",
-              fontSize: 16,
-            }}
-          />
-
-          <input
-            type="password"
-            placeholder="Senha"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: "100%",
-              padding: 12,
-              marginBottom: 16,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-              boxSizing: "border-box",
-              fontSize: 16,
-            }}
-          />
-
-          <button
-            onClick={handleLogin}
-            style={{
-              width: "100%",
-              padding: 14,
-              border: "none",
-              borderRadius: 10,
-              background: "#111827",
-              color: "#fff",
-              fontSize: 16,
-              cursor: "pointer",
+              width: 400,
+              background: "#fff",
+              padding: 32,
+              borderRadius: 24,
+              boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)",
+              border: "1px solid rgba(226,232,240,0.9)",
             }}
           >
-            Entrar
-          </button>
+            <h1 style={{ marginTop: 0, marginBottom: 10, color: "#0f172a" }}>
+              Painel Escudo Driver
+            </h1>
+            <p style={{ color: "#475569", marginBottom: 20 }}>
+              Faça login para acessar o painel administrativo.
+            </p>
+
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={styles.input}
+            />
+
+            <input
+              type="password"
+              placeholder="Senha"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.input}
+            />
+
+            <button onClick={handleLogin} style={styles.buttonPrimary}>
+              Entrar
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#f4f6f8",
-        fontFamily: "Arial, sans-serif",
-        padding: 24,
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 1280,
-          margin: "0 auto",
-        }}
-      >
+    <div style={styles.page}>
+      <div style={styles.container}>
         <div
           style={{
-            background: "#fff",
-            borderRadius: 20,
-            padding: 24,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
+            ...styles.card,
             marginBottom: 24,
             display: "flex",
             justifyContent: "space-between",
@@ -432,24 +544,13 @@ async function searchLocation() {
           }}
         >
           <div>
-            <h1 style={{ margin: 0, fontSize: 42 }}>Painel Escudo Driver</h1>
-            <p style={{ margin: "8px 0 0", color: "#666" }}>
+            <h1 style={styles.title}>Painel Escudo Driver</h1>
+            <p style={styles.subtitle}>
               Cadastro e controle de campanhas geolocalizadas
             </p>
           </div>
 
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: "12px 18px",
-              border: "none",
-              borderRadius: 10,
-              background: "#dc2626",
-              color: "#fff",
-              fontWeight: "bold",
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={handleLogout} style={styles.buttonDanger}>
             Sair
           </button>
         </div>
@@ -457,63 +558,32 @@ async function searchLocation() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.1fr 1fr",
+            gridTemplateColumns: "1.08fr 1fr",
             gap: 24,
             alignItems: "start",
           }}
         >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 20,
-              padding: 24,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: 32 }}>Nova campanha</h2>
+          <div style={styles.card}>
+            <h2 style={styles.sectionTitle}>Nova campanha</h2>
 
             <input
               placeholder="Nome do anunciante"
               value={advertiser}
               onChange={(e) => setAdvertiser(e.target.value)}
-              style={{
-                width: "100%",
-                padding: 12,
-                marginBottom: 12,
-                borderRadius: 10,
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-                fontSize: 16,
-              }}
+              style={styles.input}
             />
 
             <input
               placeholder="Cidade"
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              style={{
-                width: "100%",
-                padding: 12,
-                marginBottom: 12,
-                borderRadius: 10,
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-                fontSize: 16,
-              }}
+              style={styles.input}
             />
 
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              style={{
-                width: "100%",
-                padding: 12,
-                marginBottom: 12,
-                borderRadius: 10,
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-                fontSize: 16,
-              }}
+              style={styles.input}
             >
               <option value="">Tipo de anúncio</option>
               <option value="master_notification">Master + Notificação</option>
@@ -525,15 +595,7 @@ async function searchLocation() {
               placeholder="Raio em metros"
               value={radiusMeters}
               onChange={(e) => setRadiusMeters(e.target.value)}
-              style={{
-                width: "100%",
-                padding: 12,
-                marginBottom: 12,
-                borderRadius: 10,
-                border: "1px solid #ccc",
-                boxSizing: "border-box",
-                fontSize: 16,
-              }}
+              style={styles.input}
             />
 
             <input
@@ -549,7 +611,9 @@ async function searchLocation() {
 
             {imagePreview && (
               <div style={{ marginBottom: 16 }}>
-                <p style={{ fontWeight: "bold", marginBottom: 8 }}>Preview da imagem</p>
+                <p style={{ fontWeight: "bold", marginBottom: 8, color: "#0f172a" }}>
+                  Preview da imagem
+                </p>
                 <img
                   src={imagePreview}
                   alt="Preview"
@@ -563,47 +627,90 @@ async function searchLocation() {
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-              <input
-                placeholder="Buscar endereço ou local"
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
-                  boxSizing: "border-box",
-                  fontSize: 16,
-                }}
-              />
+            <div style={{ position: "relative", marginBottom: 16 }}>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input
+                  placeholder="Buscar endereço ou lugar em Teresina"
+                  value={searchText}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSearchText(value);
+                    fetchSuggestions(value);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 10,
+                    border: "1px solid #ccc",
+                    boxSizing: "border-box",
+                    fontSize: 16,
+                  }}
+                />
 
-              <button
-                onClick={searchLocation}
-                style={{
-                  padding: "12px 16px",
-                  border: "none",
-                  borderRadius: 10,
-                  background: "#2563eb",
-                  color: "#fff",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
-                Buscar
-              </button>
+                <button onClick={searchLocation} style={styles.buttonBlue}>
+                  Buscar
+                </button>
+              </div>
+
+              {searchLoading && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 14,
+                    color: "#64748b",
+                  }}
+                >
+                  Buscando...
+                </div>
+              )}
+
+              {suggestions.length > 0 && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    background: "#fff",
+                    border: "1px solid #ddd",
+                    borderRadius: 14,
+                    marginTop: 6,
+                    overflow: "hidden",
+                    boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+                    zIndex: 999,
+                  }}
+                >
+                  {suggestions.map((item, index) => (
+                    <div
+                      key={index}
+                      onClick={() => {
+                        const lat = item.properties.lat;
+                        const lon = item.properties.lon;
+
+                        setLatitude(lat);
+                        setLongitude(lon);
+                        setSearchText(item.properties.formatted || "");
+                        setSuggestions([]);
+                      }}
+                      style={{
+                        padding: 12,
+                        cursor: "pointer",
+                        borderBottom:
+                          index !== suggestions.length - 1
+                            ? "1px solid #eee"
+                            : "none",
+                        background: "#fff",
+                        color: "#0f172a",
+                      }}
+                    >
+                      {item.properties.formatted}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div
-              style={{
-                background: "#f9fafb",
-                padding: 12,
-                borderRadius: 12,
-                marginBottom: 16,
-                color: "#333",
-                lineHeight: 1.6,
-              }}
-            >
+            <div style={styles.infoBox}>
               <strong>Latitude:</strong> {latitude ?? "não selecionada"}
               <br />
               <strong>Longitude:</strong> {longitude ?? "não selecionada"}
@@ -614,31 +721,14 @@ async function searchLocation() {
             <button
               onClick={createCampaign}
               disabled={loading}
-              style={{
-                width: "100%",
-                padding: 14,
-                border: "none",
-                borderRadius: 10,
-                background: "#111827",
-                color: "#fff",
-                fontSize: 16,
-                fontWeight: "bold",
-                cursor: "pointer",
-              }}
+              style={styles.buttonPrimary}
             >
               {loading ? "Salvando..." : "Criar campanha"}
             </button>
           </div>
 
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 20,
-              padding: 16,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: 28 }}>Mapa da campanha</h2>
+          <div style={styles.card}>
+            <h2 style={styles.sectionTitle}>Mapa da campanha</h2>
 
             <div
               style={{
@@ -681,17 +771,14 @@ async function searchLocation() {
 
         <div
           style={{
-            background: "#fff",
-            borderRadius: 20,
-            padding: 24,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
+            ...styles.card,
             marginTop: 24,
           }}
         >
-          <h2 style={{ marginTop: 0, fontSize: 32 }}>Campanhas cadastradas</h2>
+          <h2 style={styles.sectionTitle}>Campanhas cadastradas</h2>
 
           {campaigns.length === 0 ? (
-            <p>Nenhuma campanha encontrada.</p>
+            <p style={{ color: "#475569" }}>Nenhuma campanha encontrada.</p>
           ) : (
             <div
               style={{
@@ -710,12 +797,19 @@ async function searchLocation() {
                     background: "#fafafa",
                   }}
                 >
-                  <h3 style={{ marginTop: 0, marginBottom: 8 }}>{c.advertiser}</h3>
-                  <p style={{ margin: "4px 0" }}><strong>Cidade:</strong> {c.city}</p>
-                  <p style={{ margin: "4px 0" }}>
+                  <h3 style={{ marginTop: 0, marginBottom: 8, color: "#0f172a" }}>
+                    {c.advertiser}
+                  </h3>
+
+                  <p style={{ margin: "4px 0", color: "#334155" }}>
+                    <strong>Cidade:</strong> {c.city}
+                  </p>
+
+                  <p style={{ margin: "4px 0", color: "#334155" }}>
                     <strong>Status:</strong> {c.active ? "Ativa" : "Pausada"}
                   </p>
-                  <p style={{ margin: "4px 0" }}>
+
+                  <p style={{ margin: "4px 0", color: "#334155" }}>
                     <strong>Tipo:</strong>{" "}
                     {c.type === "master_notification"
                       ? "Master + Notificação"
@@ -736,7 +830,14 @@ async function searchLocation() {
                     />
                   )}
 
-                  <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      marginTop: 16,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <button
                       onClick={() => toggleCampaign(c.id, c.active)}
                       style={{
