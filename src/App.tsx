@@ -115,7 +115,7 @@ function LocationPicker({
 
 export default function App() {
   const CLOUD_NAME = "dzvtrzzxx";
-  const UPLOAD_PRESET = "escudo_driver";
+  const UPLOAD_PRESET = "escudo-driver";
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
