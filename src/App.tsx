@@ -43,17 +43,6 @@ type Campaign = {
   radiusMeters?: number;
 };
 
-type GeoapifySuggestion = {
-  properties: {
-    lat: number;
-    lon: number;
-    formatted?: string;
-    address_line1?: string;
-    address_line2?: string;
-    name?: string;
-  };
-};
-
 const markerIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -71,7 +60,7 @@ function RecenterMap({ latitude, longitude }: RecenterMapProps) {
 
   useEffect(() => {
     if (latitude !== null && longitude !== null) {
-      map.setView([latitude, longitude], 15);
+      map.setView([latitude, longitude], 16);
     }
   }, [latitude, longitude, map]);
 
@@ -221,7 +210,6 @@ const styles = {
 export default function App() {
   const CLOUD_NAME = "dzvtrzzxx";
   const UPLOAD_PRESET = "escudo-driver";
-  const GEOAPIFY_KEY = "53edc494ce1c466488a9a4c820be8116";
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -238,9 +226,7 @@ export default function App() {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
 
-  const [searchText, setSearchText] = useState("");
-  const [suggestions, setSuggestions] = useState<GeoapifySuggestion[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [googleMapsLink, setGoogleMapsLink] = useState("");
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
@@ -264,25 +250,6 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
-
-  function buildSearchText(value: string) {
-    const text = value.trim();
-
-    if (!text) return "";
-
-    const normalized = text.toLowerCase();
-
-    if (
-      normalized.includes("teresina") ||
-      normalized.includes("timon") ||
-      normalized.includes("pi") ||
-      normalized.includes("piauí")
-    ) {
-      return text;
-    }
-
-    return `${text}, Teresina, PI, Brasil`;
-  }
 
   async function handleLogin() {
     if (!email || !password) {
@@ -322,78 +289,47 @@ export default function App() {
     return data.secure_url as string;
   }
 
-  async function fetchSuggestions(value: string) {
-    if (!value.trim()) {
-      setSuggestions([]);
-      return;
-    }
+  function extractCoordinatesFromGoogleMapsUrl(url: string) {
+    if (!url.trim()) return null;
 
     try {
-      setSearchLoading(true);
+      const decoded = decodeURIComponent(url);
 
-      const search = buildSearchText(value);
-
-      const response = await fetch(
-        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-          search
-        )}&filter=countrycode:br&bias=proximity:-42.8016,-5.0892&limit=5&apiKey=${GEOAPIFY_KEY}`
-      );
-
-      const data = await response.json();
-
-      if (data.features && data.features.length > 0) {
-        setSuggestions(data.features);
-      } else {
-        setSuggestions([]);
+      // formato mais comum: @lat,lng,zoom
+      const atMatch = decoded.match(/@(-?\d+(\.\d+)?),(-?\d+(\.\d+)?)/);
+      if (atMatch) {
+        return {
+          lat: parseFloat(atMatch[1]),
+          lng: parseFloat(atMatch[3]),
+        };
       }
+
+      // formato alternativo: !3dlat!4dlng
+      const altMatch = decoded.match(/!3d(-?\d+(\.\d+)?)!4d(-?\d+(\.\d+)?)/);
+      if (altMatch) {
+        return {
+          lat: parseFloat(altMatch[1]),
+          lng: parseFloat(altMatch[3]),
+        };
+      }
+
+      return null;
     } catch (error) {
-      console.error("Erro ao buscar sugestões:", error);
-      setSuggestions([]);
-    } finally {
-      setSearchLoading(false);
+      console.error("Erro ao interpretar link do Google Maps:", error);
+      return null;
     }
   }
 
-  async function searchLocation() {
-    if (!searchText.trim()) {
-      alert("Digite um endereço ou nome do local.");
+  function handleGoogleMapsLink() {
+    const coords = extractCoordinatesFromGoogleMapsUrl(googleMapsLink);
+
+    if (!coords) {
+      alert("Não foi possível extrair as coordenadas do link.");
       return;
     }
 
-    try {
-      const search = buildSearchText(searchText);
-
-      const response = await fetch(
-        `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(
-          search
-        )}&filter=countrycode:br&bias=proximity:-42.8016,-5.0892&limit=1&apiKey=${GEOAPIFY_KEY}`
-      );
-
-      const data = await response.json();
-
-      if (!data.features || data.features.length === 0) {
-        setLatitude(null);
-        setLongitude(null);
-        setSuggestions([]);
-        alert("Endereço não encontrado.");
-        return;
-      }
-
-      const place = data.features[0];
-      const lat = place.properties.lat;
-      const lon = place.properties.lon;
-
-      setLatitude(lat);
-      setLongitude(lon);
-      setSearchText(place.properties.formatted || searchText);
-      setSuggestions([]);
-    } catch (error) {
-      console.error("Erro ao buscar endereço:", error);
-      setLatitude(null);
-      setLongitude(null);
-      setSuggestions([]);
-      alert("Erro ao buscar endereço.");
-    }
+    setLatitude(coords.lat);
+    setLongitude(coords.lng);
   }
 
   async function loadCampaigns() {
@@ -415,7 +351,7 @@ export default function App() {
     }
 
     if (latitude === null || longitude === null) {
-      alert("Selecione o ponto no mapa.");
+      alert("Defina o local da campanha pelo link ou clicando no mapa.");
       return;
     }
 
@@ -449,8 +385,7 @@ export default function App() {
       setImageFile(null);
       setLatitude(null);
       setLongitude(null);
-      setSearchText("");
-      setSuggestions([]);
+      setGoogleMapsLink("");
 
       await loadCampaigns();
     } catch (error) {
@@ -654,16 +589,23 @@ export default function App() {
               </div>
             )}
 
-            <div style={{ position: "relative", marginBottom: 16 }}>
+            <div style={{ marginBottom: 16 }}>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: 8,
+                  fontWeight: "bold",
+                  color: "#0f172a",
+                }}
+              >
+                Cole o link do Google Maps
+              </label>
+
               <div style={{ display: "flex", gap: 10 }}>
                 <input
-                  placeholder="Buscar endereço ou lugar em Teresina"
-                  value={searchText}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSearchText(value);
-                    fetchSuggestions(value);
-                  }}
+                  placeholder="Cole aqui o link do Google Maps do local"
+                  value={googleMapsLink}
+                  onChange={(e) => setGoogleMapsLink(e.target.value)}
                   style={{
                     flex: 1,
                     padding: 12,
@@ -674,80 +616,14 @@ export default function App() {
                   }}
                 />
 
-                <button onClick={searchLocation} style={styles.buttonBlue}>
-                  Buscar
+                <button onClick={handleGoogleMapsLink} style={styles.buttonBlue}>
+                  Usar link
                 </button>
               </div>
 
-              {searchLoading && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: 14,
-                    color: "#64748b",
-                  }}
-                >
-                  Buscando...
-                </div>
-              )}
-
-              {suggestions.length > 0 && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "100%",
-                    left: 0,
-                    right: 0,
-                    background: "#fff",
-                    border: "1px solid #ddd",
-                    borderRadius: 14,
-                    marginTop: 6,
-                    overflow: "hidden",
-                    boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
-                    zIndex: 999,
-                  }}
-                >
-                  {suggestions.map((item, index) => (
-                    <div
-                      key={index}
-                      onClick={() => {
-                        const lat = item.properties.lat;
-                        const lon = item.properties.lon;
-
-                        setLatitude(lat);
-                        setLongitude(lon);
-                        setSearchText(
-                          item.properties.formatted ||
-                            item.properties.name ||
-                            item.properties.address_line1 ||
-                            ""
-                        );
-                        setSuggestions([]);
-                      }}
-                      style={{
-                        padding: 12,
-                        cursor: "pointer",
-                        borderBottom:
-                          index !== suggestions.length - 1
-                            ? "1px solid #eee"
-                            : "none",
-                        background: "#fff",
-                        color: "#0f172a",
-                      }}
-                    >
-                      <strong>
-                        {item.properties.name ||
-                          item.properties.address_line1 ||
-                          "Resultado"}
-                      </strong>
-                      <br />
-                      <span style={{ color: "#64748b", fontSize: 14 }}>
-                        {item.properties.formatted}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <p style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
+                Pesquise o local no Google Maps, copie o link e cole aqui.
+              </p>
             </div>
 
             <div style={styles.infoBox}>
