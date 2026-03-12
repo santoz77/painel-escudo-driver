@@ -10,7 +10,14 @@ import {
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
+
+import {
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+  User,
+} from "firebase/auth";
 
 import {
   MapContainer,
@@ -21,6 +28,7 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
+
 import L from "leaflet";
 
 type Campaign = {
@@ -88,12 +96,12 @@ function LocationPicker({
       <Marker
         position={[latitude, longitude]}
         icon={markerIcon}
-        draggable
+        draggable={true}
         eventHandlers={{
           dragend: (e) => {
             const marker = e.target;
-            const position = marker.getLatLng();
-            onSelect(position.lat, position.lng);
+            const pos = marker.getLatLng();
+            onSelect(pos.lat, pos.lng);
           },
         }}
       >
@@ -106,8 +114,13 @@ function LocationPicker({
 }
 
 export default function App() {
-  const CLOUD_NAME = "SEU_CLOUD_NAME";
-  const UPLOAD_PRESET = "SEU_UPLOAD_PRESET";
+  const CLOUD_NAME = "dzvtrzzxx";
+  const UPLOAD_PRESET = "escudo_driver";
+
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const [advertiser, setAdvertiser] = useState("");
   const [city, setCity] = useState("");
@@ -135,6 +148,38 @@ export default function App() {
       if (imagePreview) URL.revokeObjectURL(imagePreview);
     };
   }, [imagePreview]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  async function handleLogin() {
+    if (!email || !password) {
+      alert("Preencha email e senha.");
+      return;
+    }
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error("Erro no login:", error);
+      alert("Email ou senha inválidos.");
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+      alert("Erro ao sair.");
+    }
+  }
 
   async function uploadImage(file: File) {
     const formData = new FormData();
@@ -293,8 +338,96 @@ export default function App() {
   }
 
   useEffect(() => {
-    loadCampaigns();
-  }, []);
+    if (user) {
+      loadCampaigns();
+    }
+  }, [user]);
+
+  if (authLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "Arial, sans-serif",
+          background: "#f5f5f5",
+        }}
+      >
+        Carregando...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#f5f5f5",
+          fontFamily: "Arial, sans-serif",
+          padding: 20,
+        }}
+      >
+        <div
+          style={{
+            width: 360,
+            background: "#fff",
+            padding: 30,
+            borderRadius: 12,
+            boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Login do painel</h2>
+
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{
+              width: "100%",
+              padding: 10,
+              marginBottom: 10,
+              boxSizing: "border-box",
+            }}
+          />
+
+          <input
+            type="password"
+            placeholder="Senha"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{
+              width: "100%",
+              padding: 10,
+              marginBottom: 12,
+              boxSizing: "border-box",
+            }}
+          />
+
+          <button
+            onClick={handleLogin}
+            style={{
+              width: "100%",
+              padding: 12,
+              background: "#111",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              cursor: "pointer",
+            }}
+          >
+            Entrar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -305,8 +438,35 @@ export default function App() {
         minHeight: "100vh",
       }}
     >
-      <h1>Painel Escudo Driver</h1>
-      <p>Cadastro e gerenciamento de campanhas geolocalizadas</p>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 20,
+        }}
+      >
+        <div>
+          <h1 style={{ marginBottom: 6 }}>Painel Escudo Driver</h1>
+          <p style={{ margin: 0 }}>Cadastro e gerenciamento de campanhas geolocalizadas</p>
+        </div>
+
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: "10px 14px",
+            background: "#dc2626",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            cursor: "pointer",
+          }}
+        >
+          Sair
+        </button>
+      </div>
 
       <div
         style={{
@@ -324,20 +484,20 @@ export default function App() {
           placeholder="Nome do anunciante"
           value={advertiser}
           onChange={(e) => setAdvertiser(e.target.value)}
-          style={{ padding: 10, width: "100%", marginBottom: 10 }}
+          style={{ padding: 10, width: "100%", marginBottom: 10, boxSizing: "border-box" }}
         />
 
         <input
           placeholder="Cidade"
           value={city}
           onChange={(e) => setCity(e.target.value)}
-          style={{ padding: 10, width: "100%", marginBottom: 10 }}
+          style={{ padding: 10, width: "100%", marginBottom: 10, boxSizing: "border-box" }}
         />
 
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          style={{ padding: 10, width: "100%", marginBottom: 10 }}
+          style={{ padding: 10, width: "100%", marginBottom: 10, boxSizing: "border-box" }}
         >
           <option value="">Tipo de anúncio</option>
           <option value="master_notification">Master + Notificação</option>
@@ -348,7 +508,7 @@ export default function App() {
           placeholder="Link do anunciante (opcional)"
           value={link}
           onChange={(e) => setLink(e.target.value)}
-          style={{ padding: 10, width: "100%", marginBottom: 10 }}
+          style={{ padding: 10, width: "100%", marginBottom: 10, boxSizing: "border-box" }}
         />
 
         <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
@@ -358,7 +518,7 @@ export default function App() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              style={{ padding: 10, width: "100%" }}
+              style={{ padding: 10, width: "100%", boxSizing: "border-box" }}
             />
           </div>
 
@@ -368,7 +528,7 @@ export default function App() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              style={{ padding: 10, width: "100%" }}
+              style={{ padding: 10, width: "100%", boxSizing: "border-box" }}
             />
           </div>
         </div>
@@ -378,7 +538,7 @@ export default function App() {
           placeholder="Raio em metros"
           value={radiusMeters}
           onChange={(e) => setRadiusMeters(e.target.value)}
-          style={{ padding: 10, width: "100%", marginBottom: 10 }}
+          style={{ padding: 10, width: "100%", marginBottom: 10, boxSizing: "border-box" }}
         />
 
         <input
@@ -420,7 +580,7 @@ export default function App() {
             placeholder="Buscar endereço ou local"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            style={{ padding: 10, flex: 1 }}
+            style={{ padding: 10, flex: 1, boxSizing: "border-box" }}
           />
 
           <button
@@ -452,7 +612,11 @@ export default function App() {
           }}
         >
           <MapContainer
-            center={latitude !== null && longitude !== null ? [latitude, longitude] : [-5.0892, -42.8016]}
+            center={
+              latitude !== null && longitude !== null
+                ? [latitude, longitude]
+                : [-5.0892, -42.8016]
+            }
             zoom={13}
             style={{ height: "100%", width: "100%" }}
           >
