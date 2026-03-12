@@ -48,6 +48,9 @@ type GeoapifySuggestion = {
     lat: number;
     lon: number;
     formatted?: string;
+    address_line1?: string;
+    address_line2?: string;
+    name?: string;
   };
 };
 
@@ -262,6 +265,25 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  function buildSearchText(value: string) {
+    const text = value.trim();
+
+    if (!text) return "";
+
+    const normalized = text.toLowerCase();
+
+    if (
+      normalized.includes("teresina") ||
+      normalized.includes("timon") ||
+      normalized.includes("pi") ||
+      normalized.includes("piauí")
+    ) {
+      return text;
+    }
+
+    return `${text}, Teresina, PI, Brasil`;
+  }
+
   async function handleLogin() {
     if (!email || !password) {
       alert("Preencha email e senha.");
@@ -309,10 +331,12 @@ export default function App() {
     try {
       setSearchLoading(true);
 
+      const search = buildSearchText(value);
+
       const response = await fetch(
         `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-          value
-        )}&filter=rect:-42.95,-5.20,-42.70,-4.95&limit=5&apiKey=${GEOAPIFY_KEY}`
+          search
+        )}&filter=countrycode:br&bias=proximity:-42.8016,-5.0892&limit=5&apiKey=${GEOAPIFY_KEY}`
       );
 
       const data = await response.json();
@@ -332,15 +356,17 @@ export default function App() {
 
   async function searchLocation() {
     if (!searchText.trim()) {
-      alert("Digite um endereço.");
+      alert("Digite um endereço ou nome do local.");
       return;
     }
 
     try {
+      const search = buildSearchText(searchText);
+
       const response = await fetch(
-        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(
-          searchText
-        )}&filter=rect:-42.95,-5.20,-42.70,-4.95&limit=1&apiKey=${GEOAPIFY_KEY}`
+        `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(
+          search
+        )}&filter=countrycode:br&bias=proximity:-42.8016,-5.0892&limit=1&apiKey=${GEOAPIFY_KEY}`
       );
 
       const data = await response.json();
@@ -359,6 +385,7 @@ export default function App() {
 
       setLatitude(lat);
       setLongitude(lon);
+      setSearchText(place.properties.formatted || searchText);
       setSuggestions([]);
     } catch (error) {
       console.error("Erro ao buscar endereço:", error);
@@ -689,7 +716,12 @@ export default function App() {
 
                         setLatitude(lat);
                         setLongitude(lon);
-                        setSearchText(item.properties.formatted || "");
+                        setSearchText(
+                          item.properties.formatted ||
+                            item.properties.name ||
+                            item.properties.address_line1 ||
+                            ""
+                        );
                         setSuggestions([]);
                       }}
                       style={{
@@ -703,7 +735,15 @@ export default function App() {
                         color: "#0f172a",
                       }}
                     >
-                      {item.properties.formatted}
+                      <strong>
+                        {item.properties.name ||
+                          item.properties.address_line1 ||
+                          "Resultado"}
+                      </strong>
+                      <br />
+                      <span style={{ color: "#64748b", fontSize: 14 }}>
+                        {item.properties.formatted}
+                      </span>
                     </div>
                   ))}
                 </div>
