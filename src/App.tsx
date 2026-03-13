@@ -344,57 +344,58 @@ export default function App() {
     setCampaigns(list);
   }
 
-  async function createCampaign() {
-    if (!advertiser || !city || !type) {
-      alert("Preencha anunciante, cidade e tipo.");
-      return;
-    }
+ async function createCampaign() {
 
-    if (latitude === null || longitude === null) {
-      alert("Defina o local da campanha pelo link ou clicando no mapa.");
-      return;
-    }
-
-    let imageUrl = "";
-
-    try {
-      setLoading(true);
-
-      if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
-      }
-
-      await addDoc(collection(db, "campaigns"), {
-        advertiser,
-        city,
-        type,
-        imageUrl,
-        latitude,
-        longitude,
-        radiusMeters: Number(radiusMeters),
-        active: true,
-        createdAt: serverTimestamp(),
-      });
-
-      alert("Campanha criada com sucesso.");
-
-      setAdvertiser("");
-      setCity("");
-      setType("");
-      setRadiusMeters("500");
-      setImageFile(null);
-      setLatitude(null);
-      setLongitude(null);
-      setGoogleMapsLink("");
-
-      await loadCampaigns();
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao criar campanha.");
-    } finally {
-      setLoading(false);
-    }
+  if (!advertiser || !city || !type) {
+    alert("Preencha anunciante, cidade e tipo.");
+    return;
   }
+
+  if (latitude === null || longitude === null) {
+    alert("Defina o local da campanha.");
+    return;
+  }
+
+  try {
+
+    console.log("SALVANDO CAMPANHA...");
+
+    const docRef = await addDoc(collection(db, "campaigns"), {
+      advertiser: advertiser,
+      city: city,
+      type: type,
+      latitude: latitude,
+      longitude: longitude,
+      radiusMeters: Number(radiusMeters),
+      active: true,
+      createdAt: serverTimestamp()
+    });
+
+    console.log("CAMPANHA SALVA ID:", docRef.id);
+
+    alert("Campanha criada com sucesso.");
+
+    setAdvertiser("");
+    setCity("");
+    setType("");
+    setRadiusMeters("500");
+    setLatitude(null);
+    setLongitude(null);
+    setGoogleMapsLink("");
+
+    loadCampaigns();
+
+  } catch (error: any) {
+
+    console.error("ERRO FIRESTORE:", error);
+
+    alert(
+      "Erro ao salvar no Firestore: " +
+      (error?.message || JSON.stringify(error))
+    );
+
+  }
+}
 
   async function toggleCampaign(id: string, active: boolean) {
     await updateDoc(doc(db, "campaigns", id), {
