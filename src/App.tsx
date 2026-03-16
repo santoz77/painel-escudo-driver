@@ -99,7 +99,7 @@ function LocationPicker({
         draggable={true}
         eventHandlers={{
           dragend: (e) => {
-            const marker = e.target;
+            const marker = e.target as L.Marker;
             const pos = marker.getLatLng();
             onSelect(pos.lat, pos.lng);
           },
@@ -246,7 +246,6 @@ export default function App() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [campaignLink, setCampaignLink] = useState("");
 
   const [advertiser, setAdvertiser] = useState("");
   const [city, setCity] = useState("");
@@ -276,11 +275,11 @@ export default function App() {
 
   useEffect(() => {
     return () => {
-      if (imageFile && imagePreview.startsWith("blob:")) {
+      if (imagePreview.startsWith("blob:")) {
         URL.revokeObjectURL(imagePreview);
       }
     };
-  }, [imageFile, imagePreview]);
+  }, [imagePreview]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -334,9 +333,9 @@ export default function App() {
       console.error("CLOUDINARY ERROR:", data);
       throw new Error(
         data?.error?.message ||
-        data?.message ||
-        data?.rawText ||
-        "Erro ao enviar imagem"
+          data?.message ||
+          data?.rawText ||
+          "Erro ao enviar imagem"
       );
     }
 
@@ -467,7 +466,7 @@ export default function App() {
         longitude,
         radiusMeters: Number(radiusMeters),
         active: true,
-        link: campaignLink,
+        link: campaignLink.trim(),
         startDate,
         endDate,
         createdAt: serverTimestamp(),
@@ -478,7 +477,9 @@ export default function App() {
       await loadCampaigns();
     } catch (error: any) {
       console.error("ERRO AO CRIAR CAMPANHA:", error);
-      alert("Erro ao criar campanha: " + (error?.message || JSON.stringify(error)));
+      alert(
+        "Erro ao criar campanha: " + (error?.message || JSON.stringify(error))
+      );
     } finally {
       setLoading(false);
     }
@@ -516,7 +517,7 @@ export default function App() {
         latitude,
         longitude,
         radiusMeters: Number(radiusMeters),
-        link: googleMapsLink,
+        link: campaignLink.trim(),
         startDate,
         endDate,
       });
@@ -527,8 +528,7 @@ export default function App() {
     } catch (error: any) {
       console.error("ERRO AO EDITAR CAMPANHA:", error);
       alert(
-        "Erro ao editar campanha: " +
-        (error?.message || JSON.stringify(error))
+        "Erro ao editar campanha: " + (error?.message || JSON.stringify(error))
       );
     } finally {
       setLoading(false);
@@ -814,6 +814,22 @@ export default function App() {
               </p>
             </div>
 
+            <div style={{ marginBottom: 16 }}>
+              <label style={styles.label}>Link do anúncio</label>
+
+              <input
+                placeholder="Ex.: Instagram, site, WhatsApp, cardápio..."
+                value={campaignLink}
+                onChange={(e) => setCampaignLink(e.target.value)}
+                style={styles.input}
+              />
+
+              <p style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
+                Esse link será aberto quando o usuário tocar no banner ou na
+                notificação.
+              </p>
+            </div>
+
             <div style={styles.infoBox}>
               <strong>Latitude:</strong> {latitude ?? "não selecionada"}
               <br />
@@ -833,13 +849,14 @@ export default function App() {
                 style={{
                   ...styles.buttonPrimary,
                   flex: 1,
+                  opacity: loading ? 0.7 : 1,
                 }}
               >
                 {loading
                   ? "Salvando..."
                   : editingId
-                    ? "Salvar edição"
-                    : "Criar campanha"}
+                  ? "Salvar edição"
+                  : "Criar campanha"}
               </button>
 
               {editingId && (
@@ -898,21 +915,6 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
-          <label style={styles.label}>Link do anúncio</label>
-
-          <input
-            placeholder="Ex.: Instagram, site, WhatsApp, cardápio..."
-            value={campaignLink}
-            onChange={(e) => setCampaignLink(e.target.value)}
-            style={styles.input}
-          />
-
-          <p style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
-            Esse link será aberto quando o usuário tocar no banner ou na notificação.
-          </p>
-        </div>
-
         <div
           style={{
             ...styles.card,
@@ -964,8 +966,8 @@ export default function App() {
                     {c.type === "master"
                       ? "Master + Notificação"
                       : c.type === "notification"
-                        ? "Somente Notificação"
-                        : c.type}
+                      ? "Somente Notificação"
+                      : c.type}
                   </p>
 
                   <p style={{ margin: "4px 0", color: "#334155" }}>
@@ -975,6 +977,30 @@ export default function App() {
                   <p style={{ margin: "4px 0", color: "#334155" }}>
                     <strong>Término:</strong> {c.endDate || "-"}
                   </p>
+
+                  {c.link && (
+                    <div style={{ marginTop: 8 }}>
+                      <p
+                        style={{
+                          margin: "4px 0",
+                          color: "#334155",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        <strong>Link:</strong> {c.link}
+                      </p>
+
+                      <button
+                        onClick={() => window.open(c.link, "_blank", "noopener,noreferrer")}
+                        style={{
+                          ...styles.buttonGreen,
+                          marginTop: 8,
+                        }}
+                      >
+                        Abrir link
+                      </button>
+                    </div>
+                  )}
 
                   {c.imageUrl && (
                     <img
