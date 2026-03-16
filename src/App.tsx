@@ -687,8 +687,8 @@ export default function App() {
               style={styles.input}
             >
               <option value="">Tipo de anúncio</option>
-              <option value="master_notification">Master + Notificação</option>
-              <option value="notification_only">Somente Notificação</option>
+              <option value="master">Master + Notificação</option>
+              <option value="notification">Somente Notificação</option>
             </select>
 
             <input
