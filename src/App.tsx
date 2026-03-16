@@ -268,7 +268,18 @@ export default function App() {
     await signOut(auth);
   }
 
+  async function uploadImage(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", UPLOAD_PRESET);
 
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
 
     if (!res.ok) {
       throw new Error("Erro ao enviar imagem");
@@ -284,7 +295,6 @@ export default function App() {
     try {
       const decoded = decodeURIComponent(url);
 
-      // formato mais comum: @lat,lng,zoom
       const atMatch = decoded.match(/@(-?\d+(\.\d+)?),(-?\d+(\.\d+)?)/);
       if (atMatch) {
         return {
@@ -293,7 +303,6 @@ export default function App() {
         };
       }
 
-      // formato alternativo: !3dlat!4dlng
       const altMatch = decoded.match(/!3d(-?\d+(\.\d+)?)!4d(-?\d+(\.\d+)?)/);
       if (altMatch) {
         return {
@@ -333,65 +342,69 @@ export default function App() {
     setCampaigns(list);
   }
 
- async function createCampaign() {
+  async function createCampaign() {
+    if (!advertiser || !city || !type) {
+      alert("Preencha anunciante, cidade e tipo.");
+      return;
+    }
 
-  if (!advertiser || !city || !type) {
-    alert("Preencha anunciante, cidade e tipo.");
-    return;
+    if (latitude === null || longitude === null) {
+      alert("Defina o local da campanha.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      let imageUrl = "";
+
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile);
+      }
+
+      const docRef = await addDoc(collection(db, "campaigns"), {
+        advertiser,
+        city,
+        type,
+        imageUrl,
+        latitude,
+        longitude,
+        radiusMeters: Number(radiusMeters),
+        active: true,
+        createdAt: serverTimestamp(),
+      });
+
+      console.log("CAMPANHA SALVA ID:", docRef.id);
+
+      alert("Campanha criada com sucesso.");
+
+      setAdvertiser("");
+      setCity("");
+      setType("");
+      setRadiusMeters("500");
+      setImageFile(null);
+      setLatitude(null);
+      setLongitude(null);
+      setGoogleMapsLink("");
+
+      await loadCampaigns();
+    } catch (error: any) {
+      console.error("ERRO FIRESTORE:", error);
+      alert(
+        "Erro ao salvar no Firestore: " +
+          (error?.message || JSON.stringify(error))
+      );
+    } finally {
+      setLoading(false);
+    }
   }
-
-  if (latitude === null || longitude === null) {
-    alert("Defina o local da campanha.");
-    return;
-  }
-
-  try {
-
-    console.log("SALVANDO CAMPANHA...");
-
-    const docRef = await addDoc(collection(db, "campaigns"), {
-      advertiser: advertiser,
-      city: city,
-      type: type,
-      latitude: latitude,
-      longitude: longitude,
-      radiusMeters: Number(radiusMeters),
-      active: true,
-      createdAt: serverTimestamp()
-    });
-
-    console.log("CAMPANHA SALVA ID:", docRef.id);
-
-    alert("Campanha criada com sucesso.");
-
-    setAdvertiser("");
-    setCity("");
-    setType("");
-    setRadiusMeters("500");
-    setLatitude(null);
-    setLongitude(null);
-    setGoogleMapsLink("");
-
-    loadCampaigns();
-
-  } catch (error: any) {
-
-    console.error("ERRO FIRESTORE:", error);
-
-    alert(
-      "Erro ao salvar no Firestore: " +
-      (error?.message || JSON.stringify(error))
-    );
-
-  }
-}
 
   async function toggleCampaign(id: string, active: boolean) {
     await updateDoc(doc(db, "campaigns", id), {
       active: !active,
     });
 
-    loadCampaigns();
+    await loadCampaigns();
   }
 
   async function deleteCampaign(id: string) {
@@ -399,7 +412,7 @@ export default function App() {
     if (!ok) return;
 
     await deleteDoc(doc(db, "campaigns", id));
-    loadCampaigns();
+    await loadCampaigns();
   }
 
   useEffect(() => {
@@ -563,7 +576,13 @@ export default function App() {
 
             {imagePreview && (
               <div style={{ marginBottom: 16 }}>
-                <p style={{ fontWeight: "bold", marginBottom: 8, color: "#0f172a" }}>
+                <p
+                  style={{
+                    fontWeight: "bold",
+                    marginBottom: 8,
+                    color: "#0f172a",
+                  }}
+                >
                   Preview da imagem
                 </p>
                 <img
@@ -782,3 +801,4 @@ export default function App() {
       </div>
     </div>
   );
+}
