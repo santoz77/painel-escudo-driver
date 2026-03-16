@@ -41,6 +41,9 @@ type Campaign = {
   latitude?: number;
   longitude?: number;
   radiusMeters?: number;
+  link?: string;
+  startDate?: string;
+  endDate?: string;
 };
 
 const markerIcon = new L.Icon({
@@ -196,6 +199,26 @@ const styles = {
     cursor: "pointer",
   } as const,
 
+  buttonWarn: {
+    padding: "10px 14px",
+    border: "none",
+    borderRadius: 10,
+    background: "#f59e0b",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+  } as const,
+
+  buttonGreen: {
+    padding: "10px 14px",
+    border: "none",
+    borderRadius: 10,
+    background: "#16a34a",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+  } as const,
+
   infoBox: {
     background: "#f8fafc",
     border: "1px solid #e2e8f0",
@@ -205,11 +228,18 @@ const styles = {
     color: "#334155",
     lineHeight: 1.7,
   } as const,
+
+  label: {
+    display: "block",
+    marginBottom: 8,
+    fontWeight: "bold",
+    color: "#0f172a",
+  } as const,
 };
 
 export default function App() {
   const CLOUD_NAME = "dzvtrzzxx";
-  const UPLOAD_PRESET = "escudo_driver";
+  const UPLOAD_PRESET = "escudodriver";
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -227,20 +257,28 @@ export default function App() {
   const [longitude, setLongitude] = useState<number | null>(null);
 
   const [googleMapsLink, setGoogleMapsLink] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState("");
+
   const imagePreview = useMemo(() => {
-    if (!imageFile) return "";
-    return URL.createObjectURL(imageFile);
-  }, [imageFile]);
+    if (imageFile) return URL.createObjectURL(imageFile);
+    if (existingImageUrl) return existingImageUrl;
+    return "";
+  }, [imageFile, existingImageUrl]);
 
   useEffect(() => {
     return () => {
-      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      if (imageFile && imagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
     };
-  }, [imagePreview]);
+  }, [imageFile, imagePreview]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -342,41 +380,7 @@ export default function App() {
     setCampaigns(list);
   }
 
-async function createCampaign() {
-  if (!advertiser || !city || !type) {
-    alert("Preencha anunciante, cidade e tipo.");
-    return;
-  }
-
-  if (latitude === null || longitude === null) {
-    alert("Defina o local da campanha pelo link ou clicando no mapa.");
-    return;
-  }
-
-  let imageUrl = "";
-
-  try {
-    setLoading(true);
-
-    if (imageFile) {
-      imageUrl = await uploadImage(imageFile);
-    }
-
-    await addDoc(collection(db, "campaigns"), {
-      advertiser,
-      city,
-      type,
-      imageUrl,
-      latitude,
-      longitude,
-      radiusMeters: Number(radiusMeters),
-      active: true,
-      link: googleMapsLink,
-      createdAt: serverTimestamp(),
-    });
-
-    alert("Campanha criada com sucesso.");
-
+  function resetForm() {
     setAdvertiser("");
     setCity("");
     setType("");
@@ -385,18 +389,144 @@ async function createCampaign() {
     setLatitude(null);
     setLongitude(null);
     setGoogleMapsLink("");
-
-    await loadCampaigns();
-  } catch (error: any) {
-    console.error("ERRO AO CRIAR CAMPANHA:", error);
-    alert(
-      "Erro ao criar campanha: " +
-        (error?.message || JSON.stringify(error))
-    );
-  } finally {
-    setLoading(false);
+    setStartDate("");
+    setEndDate("");
+    setEditingId(null);
+    setExistingImageUrl("");
   }
-}
+
+  function validateDates() {
+    if (!startDate || !endDate) {
+      alert("Preencha a data de início e a data de término.");
+      return false;
+    }
+
+    if (endDate < startDate) {
+      alert("A data de término não pode ser menor que a data de início.");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function createCampaign() {
+    if (!advertiser || !city || !type) {
+      alert("Preencha anunciante, cidade e tipo.");
+      return;
+    }
+
+    if (latitude === null || longitude === null) {
+      alert("Defina o local da campanha pelo link ou clicando no mapa.");
+      return;
+    }
+
+    if (!validateDates()) return;
+
+    try {
+      setLoading(true);
+
+      let imageUrl = existingImageUrl;
+
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile);
+      }
+
+      await addDoc(collection(db, "campaigns"), {
+        advertiser,
+        city,
+        type,
+        imageUrl,
+        latitude,
+        longitude,
+        radiusMeters: Number(radiusMeters),
+        active: true,
+        link: googleMapsLink,
+        startDate,
+        endDate,
+        createdAt: serverTimestamp(),
+      });
+
+      alert("Campanha criada com sucesso.");
+      resetForm();
+      await loadCampaigns();
+    } catch (error: any) {
+      console.error("ERRO AO CRIAR CAMPANHA:", error);
+      alert(
+        "Erro ao criar campanha: " +
+          (error?.message || JSON.stringify(error))
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveEditedCampaign() {
+    if (!editingId) return;
+
+    if (!advertiser || !city || !type) {
+      alert("Preencha anunciante, cidade e tipo.");
+      return;
+    }
+
+    if (latitude === null || longitude === null) {
+      alert("Defina o local da campanha.");
+      return;
+    }
+
+    if (!validateDates()) return;
+
+    try {
+      setLoading(true);
+
+      let imageUrl = existingImageUrl;
+
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile);
+      }
+
+      await updateDoc(doc(db, "campaigns", editingId), {
+        advertiser,
+        city,
+        type,
+        imageUrl,
+        latitude,
+        longitude,
+        radiusMeters: Number(radiusMeters),
+        link: googleMapsLink,
+        startDate,
+        endDate,
+      });
+
+      alert("Campanha atualizada com sucesso.");
+      resetForm();
+      await loadCampaigns();
+    } catch (error: any) {
+      console.error("ERRO AO EDITAR CAMPANHA:", error);
+      alert(
+        "Erro ao editar campanha: " +
+          (error?.message || JSON.stringify(error))
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function editCampaign(c: Campaign) {
+    setEditingId(c.id);
+    setAdvertiser(c.advertiser || "");
+    setCity(c.city || "");
+    setType(c.type || "");
+    setRadiusMeters(String(c.radiusMeters ?? 500));
+    setLatitude(c.latitude ?? null);
+    setLongitude(c.longitude ?? null);
+    setGoogleMapsLink(c.link || "");
+    setStartDate(c.startDate || "");
+    setEndDate(c.endDate || "");
+    setExistingImageUrl(c.imageUrl || "");
+    setImageFile(null);
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function toggleCampaign(id: string, active: boolean) {
     await updateDoc(doc(db, "campaigns", id), {
@@ -510,7 +640,7 @@ async function createCampaign() {
           <div>
             <h1 style={styles.title}>Painel Escudo Driver</h1>
             <p style={styles.subtitle}>
-              Cadastro e controle de campanhas geolocalizadas
+              Cadastro, edição e controle de campanhas geolocalizadas
             </p>
           </div>
 
@@ -528,7 +658,9 @@ async function createCampaign() {
           }}
         >
           <div style={styles.card}>
-            <h2 style={styles.sectionTitle}>Nova campanha</h2>
+            <h2 style={styles.sectionTitle}>
+              {editingId ? "Editar campanha" : "Nova campanha"}
+            </h2>
 
             <input
               placeholder="Nome do anunciante"
@@ -537,12 +669,17 @@ async function createCampaign() {
               style={styles.input}
             />
 
-            <input
-              placeholder="Cidade"
+            <select
               value={city}
               onChange={(e) => setCity(e.target.value)}
               style={styles.input}
-            />
+            >
+              <option value="">Selecione a cidade</option>
+              <option value="Teresina">Teresina</option>
+              <option value="Timon">Timon</option>
+              <option value="Parnaiba">Parnaíba</option>
+              <option value="Piripiri">Piripiri</option>
+            </select>
 
             <select
               value={type}
@@ -559,6 +696,22 @@ async function createCampaign() {
               placeholder="Raio em metros"
               value={radiusMeters}
               onChange={(e) => setRadiusMeters(e.target.value)}
+              style={styles.input}
+            />
+
+            <label style={styles.label}>Data de início</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              style={styles.input}
+            />
+
+            <label style={styles.label}>Data de término</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
               style={styles.input}
             />
 
@@ -598,16 +751,7 @@ async function createCampaign() {
             )}
 
             <div style={{ marginBottom: 16 }}>
-              <label
-                style={{
-                  display: "block",
-                  marginBottom: 8,
-                  fontWeight: "bold",
-                  color: "#0f172a",
-                }}
-              >
-                Cole o link do Google Maps
-              </label>
+              <label style={styles.label}>Cole o link do Google Maps</label>
 
               <div style={{ display: "flex", gap: 10 }}>
                 <input
@@ -640,15 +784,40 @@ async function createCampaign() {
               <strong>Longitude:</strong> {longitude ?? "não selecionada"}
               <br />
               <strong>Raio:</strong> {radiusMeters} m
+              <br />
+              <strong>Início:</strong> {startDate || "não definido"}
+              <br />
+              <strong>Término:</strong> {endDate || "não definido"}
             </div>
 
-            <button
-              onClick={createCampaign}
-              disabled={loading}
-              style={styles.buttonPrimary}
-            >
-              {loading ? "Salvando..." : "Criar campanha"}
-            </button>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                onClick={editingId ? saveEditedCampaign : createCampaign}
+                disabled={loading}
+                style={{
+                  ...styles.buttonPrimary,
+                  flex: 1,
+                }}
+              >
+                {loading
+                  ? "Salvando..."
+                  : editingId
+                  ? "Salvar edição"
+                  : "Criar campanha"}
+              </button>
+
+              {editingId && (
+                <button
+                  onClick={resetForm}
+                  style={{
+                    ...styles.buttonDanger,
+                    minWidth: 140,
+                  }}
+                >
+                  Cancelar edição
+                </button>
+              )}
+            </div>
           </div>
 
           <div style={styles.card}>
@@ -707,7 +876,7 @@ async function createCampaign() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
                 gap: 16,
               }}
             >
@@ -721,7 +890,13 @@ async function createCampaign() {
                     background: "#fafafa",
                   }}
                 >
-                  <h3 style={{ marginTop: 0, marginBottom: 8, color: "#0f172a" }}>
+                  <h3
+                    style={{
+                      marginTop: 0,
+                      marginBottom: 8,
+                      color: "#0f172a",
+                    }}
+                  >
                     {c.advertiser}
                   </h3>
 
@@ -738,6 +913,14 @@ async function createCampaign() {
                     {c.type === "master_notification"
                       ? "Master + Notificação"
                       : "Somente Notificação"}
+                  </p>
+
+                  <p style={{ margin: "4px 0", color: "#334155" }}>
+                    <strong>Início:</strong> {c.startDate || "-"}
+                  </p>
+
+                  <p style={{ margin: "4px 0", color: "#334155" }}>
+                    <strong>Término:</strong> {c.endDate || "-"}
                   </p>
 
                   {c.imageUrl && (
@@ -763,31 +946,22 @@ async function createCampaign() {
                     }}
                   >
                     <button
-                      onClick={() => toggleCampaign(c.id, c.active)}
-                      style={{
-                        padding: "10px 14px",
-                        border: "none",
-                        borderRadius: 10,
-                        background: c.active ? "#f59e0b" : "#16a34a",
-                        color: "#fff",
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                      }}
+                      onClick={() => editCampaign(c)}
+                      style={styles.buttonBlue}
                     >
-                      {c.active ? "Stop" : "Play"}
+                      Editar
+                    </button>
+
+                    <button
+                      onClick={() => toggleCampaign(c.id, c.active)}
+                      style={c.active ? styles.buttonWarn : styles.buttonGreen}
+                    >
+                      {c.active ? "Pausar" : "Ativar"}
                     </button>
 
                     <button
                       onClick={() => deleteCampaign(c.id)}
-                      style={{
-                        padding: "10px 14px",
-                        border: "none",
-                        borderRadius: 10,
-                        background: "#dc2626",
-                        color: "#fff",
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                      }}
+                      style={styles.buttonDanger}
                     >
                       Excluir
                     </button>
