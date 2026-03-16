@@ -319,11 +319,30 @@ export default function App() {
       }
     );
 
-    if (!res.ok) {
-      throw new Error("Erro ao enviar imagem");
+    const rawText = await res.text();
+
+    let data: any = null;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = { rawText };
     }
 
-    const data = await res.json();
+    if (!res.ok) {
+      console.error("CLOUDINARY ERROR:", data);
+      throw new Error(
+        data?.error?.message ||
+        data?.message ||
+        data?.rawText ||
+        "Erro ao enviar imagem"
+      );
+    }
+
+    if (!data?.secure_url) {
+      console.error("CLOUDINARY RESPOSTA INVÁLIDA:", data);
+      throw new Error("Cloudinary não retornou secure_url.");
+    }
+
     return data.secure_url as string;
   }
 
@@ -422,6 +441,11 @@ export default function App() {
 
     if (!validateDates()) return;
 
+    if (!imageFile && !existingImageUrl) {
+      alert("Selecione uma imagem para a campanha.");
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -451,10 +475,7 @@ export default function App() {
       await loadCampaigns();
     } catch (error: any) {
       console.error("ERRO AO CRIAR CAMPANHA:", error);
-      alert(
-        "Erro ao criar campanha: " +
-          (error?.message || JSON.stringify(error))
-      );
+      alert("Erro ao criar campanha: " + (error?.message || JSON.stringify(error)));
     } finally {
       setLoading(false);
     }
@@ -504,7 +525,7 @@ export default function App() {
       console.error("ERRO AO EDITAR CAMPANHA:", error);
       alert(
         "Erro ao editar campanha: " +
-          (error?.message || JSON.stringify(error))
+        (error?.message || JSON.stringify(error))
       );
     } finally {
       setLoading(false);
@@ -719,9 +740,20 @@ export default function App() {
               type="file"
               accept="image/*"
               onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  setImageFile(e.target.files[0]);
+                const file = e.target.files?.[0];
+                if (!file) return;
+
+                if (!file.type.startsWith("image/")) {
+                  alert("Selecione um arquivo de imagem válido.");
+                  return;
                 }
+
+                if (file.size > 10 * 1024 * 1024) {
+                  alert("A imagem deve ter no máximo 10 MB.");
+                  return;
+                }
+
+                setImageFile(file);
               }}
               style={{ marginBottom: 14 }}
             />
@@ -802,8 +834,8 @@ export default function App() {
                 {loading
                   ? "Salvando..."
                   : editingId
-                  ? "Salvar edição"
-                  : "Criar campanha"}
+                    ? "Salvar edição"
+                    : "Criar campanha"}
               </button>
 
               {editingId && (
@@ -910,9 +942,11 @@ export default function App() {
 
                   <p style={{ margin: "4px 0", color: "#334155" }}>
                     <strong>Tipo:</strong>{" "}
-                    {c.type === "master_notification"
+                    {c.type === "master"
                       ? "Master + Notificação"
-                      : "Somente Notificação"}
+                      : c.type === "notification"
+                        ? "Somente Notificação"
+                        : c.type}
                   </p>
 
                   <p style={{ margin: "4px 0", color: "#334155" }}>
