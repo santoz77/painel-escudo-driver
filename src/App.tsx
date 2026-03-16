@@ -246,6 +246,7 @@ export default function App() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [campaignLink, setCampaignLink] = useState("");
 
   const [advertiser, setAdvertiser] = useState("");
   const [city, setCity] = useState("");
@@ -257,6 +258,7 @@ export default function App() {
   const [longitude, setLongitude] = useState<number | null>(null);
 
   const [googleMapsLink, setGoogleMapsLink] = useState("");
+  const [campaignLink, setCampaignLink] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -408,6 +410,7 @@ export default function App() {
     setLatitude(null);
     setLongitude(null);
     setGoogleMapsLink("");
+    setCampaignLink("");
     setStartDate("");
     setEndDate("");
     setEditingId(null);
@@ -464,7 +467,7 @@ export default function App() {
         longitude,
         radiusMeters: Number(radiusMeters),
         active: true,
-        link: googleMapsLink,
+        link: campaignLink,
         startDate,
         endDate,
         createdAt: serverTimestamp(),
@@ -540,7 +543,8 @@ export default function App() {
     setRadiusMeters(String(c.radiusMeters ?? 500));
     setLatitude(c.latitude ?? null);
     setLongitude(c.longitude ?? null);
-    setGoogleMapsLink(c.link || "");
+    setGoogleMapsLink("");
+    setCampaignLink(c.link || "");
     setStartDate(c.startDate || "");
     setEndDate(c.endDate || "");
     setExistingImageUrl(c.imageUrl || "");
@@ -892,6 +896,21 @@ export default function App() {
               </MapContainer>
             </div>
           </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={styles.label}>Link do anúncio</label>
+
+          <input
+            placeholder="Ex.: Instagram, site, WhatsApp, cardápio..."
+            value={campaignLink}
+            onChange={(e) => setCampaignLink(e.target.value)}
+            style={styles.input}
+          />
+
+          <p style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
+            Esse link será aberto quando o usuário tocar no banner ou na notificação.
+          </p>
         </div>
 
         <div
