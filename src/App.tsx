@@ -42,6 +42,7 @@ type Campaign = {
   longitude?: number;
   radiusMeters?: number;
   link?: string;
+  text?: string;
   startDate?: string;
   endDate?: string;
 };
@@ -246,6 +247,7 @@ export default function App() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [campaignText, setCampaignText] = useState("");
 
   const [advertiser, setAdvertiser] = useState("");
   const [city, setCity] = useState("");
@@ -333,9 +335,9 @@ export default function App() {
       console.error("CLOUDINARY ERROR:", data);
       throw new Error(
         data?.error?.message ||
-          data?.message ||
-          data?.rawText ||
-          "Erro ao enviar imagem"
+        data?.message ||
+        data?.rawText ||
+        "Erro ao enviar imagem"
       );
     }
 
@@ -406,6 +408,7 @@ export default function App() {
     setType("");
     setRadiusMeters("500");
     setImageFile(null);
+    setCampaignText("");
     setLatitude(null);
     setLongitude(null);
     setGoogleMapsLink("");
@@ -467,6 +470,7 @@ export default function App() {
         radiusMeters: Number(radiusMeters),
         active: true,
         link: campaignLink.trim(),
+        text: campaignText.trim(),
         startDate,
         endDate,
         createdAt: serverTimestamp(),
@@ -518,6 +522,7 @@ export default function App() {
         longitude,
         radiusMeters: Number(radiusMeters),
         link: campaignLink.trim(),
+        text: campaignText.trim(),
         startDate,
         endDate,
       });
@@ -549,6 +554,7 @@ export default function App() {
     setEndDate(c.endDate || "");
     setExistingImageUrl(c.imageUrl || "");
     setImageFile(null);
+    setCampaignText(c.text || "");
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -693,6 +699,23 @@ export default function App() {
               onChange={(e) => setAdvertiser(e.target.value)}
               style={styles.input}
             />
+
+            <label style={styles.label}>Texto da campanha</label>
+
+            <textarea
+              placeholder="Ex.: Promoção especial para motoristas da região..."
+              value={campaignText}
+              onChange={(e) => setCampaignText(e.target.value)}
+              style={{
+                ...styles.input,
+                minHeight: 90,
+                resize: "vertical",
+              }}
+            />
+
+            <p style={{ marginTop: 6, color: "#64748b", fontSize: 14 }}>
+              Esse texto aparecerá na notificação e no banner do app.
+            </p>
 
             <select
               value={city}
@@ -855,8 +878,8 @@ export default function App() {
                 {loading
                   ? "Salvando..."
                   : editingId
-                  ? "Salvar edição"
-                  : "Criar campanha"}
+                    ? "Salvar edição"
+                    : "Criar campanha"}
               </button>
 
               {editingId && (
@@ -966,9 +989,10 @@ export default function App() {
                     {c.type === "master"
                       ? "Master + Notificação"
                       : c.type === "notification"
-                      ? "Somente Notificação"
-                      : c.type}
+                        ? "Somente Notificação"
+                        : c.type}
                   </p>
+
 
                   <p style={{ margin: "4px 0", color: "#334155" }}>
                     <strong>Início:</strong> {c.startDate || "-"}
@@ -977,6 +1001,12 @@ export default function App() {
                   <p style={{ margin: "4px 0", color: "#334155" }}>
                     <strong>Término:</strong> {c.endDate || "-"}
                   </p>
+
+                  {c.text && (
+                    <p style={{ margin: "6px 0", color: "#475569" }}>
+                      <strong>Mensagem:</strong> {c.text}
+                    </p>
+                  )}
 
                   {c.link && (
                     <div style={{ marginTop: 8 }}>
